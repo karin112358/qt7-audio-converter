@@ -7,11 +7,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <RootNamespace>QuickTimeConverter.Cli</RootNamespace>
+    <RootNamespace>Qt7AudioConverter.Cli</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\QuickTimeWavConverter\QuickTimeWavConverter.csproj" />
+    <ProjectReference Include="..\Qt7AudioConverter\Qt7AudioConverter.csproj" />
   </ItemGroup>
 
 </Project>

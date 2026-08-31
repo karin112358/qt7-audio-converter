@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace QuickTimeWavConverter
+namespace Qt7AudioConverter
 {
     /// <summary>
     /// Rewrites WAV files saved by QuickTime 10 (which inserts JUNK/FLLR padding

@@ -19,7 +19,7 @@ jobs:
       - name: Publish all runtimes
         run: |
           for rid in win-x64 osx-x64 osx-arm64; do
-            dotnet publish src/QuickTimeConverter.Cli -c Release -r "$rid" \
+            dotnet publish src/Qt7AudioConverter.Cli -c Release -r "$rid" \
               --self-contained -p:PublishSingleFile=true -p:DebugType=none \
               -o "publish/$rid"
           done

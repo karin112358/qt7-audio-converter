@@ -1,8 +1,8 @@
-using QuickTimeWavConverter;
+using Qt7AudioConverter;
 
 if (args.Length is < 1 or > 2)
 {
-    Console.Error.WriteLine("Usage: QuickTimeConverter.Cli <input.wav|input.mp3|folder> [output.wav]");
+    Console.Error.WriteLine("Usage: qt7convert <input.wav|input.mp3|folder> [output.wav]");
     Console.Error.WriteLine("  With a folder, every *.wav and *.mp3 inside is converted to <name>.qt7.wav.");
     return 1;
 }

@@ -1,6 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/QuickTimeConverter.Cli/QuickTimeConverter.Cli.csproj" />
-    <Project Path="src/QuickTimeWavConverter/QuickTimeWavConverter.csproj" />
-  </Folder>
-</Solution>

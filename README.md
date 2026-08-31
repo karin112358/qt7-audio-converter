@@ -45,6 +45,9 @@ flag once:
 xattr -d com.apple.quarantine qt7convert
 ```
 
+If running it gives "permission denied" (e.g. because the file was copied
+without its permissions), make it executable once with `chmod +x qt7convert`.
+
 ## Usage
 
 ```bash
@@ -68,12 +71,12 @@ folder from Finder into the window to insert its path.
 
 ## Embedding in your own .NET application
 
-The conversion logic lives in the `QuickTimeWavConverter` class library,
+The conversion logic lives in the `Qt7AudioConverter` class library,
 which targets `netstandard2.0` — it works from .NET Framework, .NET 6/8+,
 on Windows and macOS, with no native dependencies:
 
 ```csharp
-using QuickTimeWavConverter;
+using Qt7AudioConverter;
 
 WavQt7Converter.Convert("input.wav", "output.wav");   // lossless chunk rewrite
 Mp3ToQt7Converter.Convert("input.mp3", "output.wav"); // decode MP3 to PCM WAV
@@ -86,10 +89,10 @@ Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
 ```bash
 dotnet build                                        # build everything
-dotnet run --project src/QuickTimeConverter.Cli -- input.wav
+dotnet run --project src/Qt7AudioConverter.Cli -- input.wav
 
 # Self-contained single-file executable, e.g. for Intel Macs:
-dotnet publish src/QuickTimeConverter.Cli -c Release -r osx-x64 \
+dotnet publish src/Qt7AudioConverter.Cli -c Release -r osx-x64 \
   --self-contained -p:PublishSingleFile=true -p:DebugType=none -o publish/osx-x64
 ```
 

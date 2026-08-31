@@ -3,7 +3,7 @@ using System.IO;
 using System.Text;
 using NLayer;
 
-namespace QuickTimeWavConverter
+namespace Qt7AudioConverter
 {
     /// <summary>
     /// Decodes an MP3 file to a canonical QuickTime 7-style WAV

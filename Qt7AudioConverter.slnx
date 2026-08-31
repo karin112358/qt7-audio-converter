@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Qt7AudioConverter.Cli/Qt7AudioConverter.Cli.csproj" />
+    <Project Path="src/Qt7AudioConverter/Qt7AudioConverter.csproj" />
+  </Folder>
+</Solution>

@@ -20,7 +20,10 @@ place.
 
 MP3 files are also supported: they are decoded to 16-bit PCM (using the
 managed, cross-platform [NLayer](https://www.nuget.org/packages/NLayer)
-decoder — no native dependencies) and written as canonical WAV files.
+decoder — no native dependencies) and written as canonical WAV files at
+**44.1 kHz** — MP3s encoded at other rates (32 kHz, 22.05 kHz, 48 kHz, …)
+are resampled, since legacy devices commonly accept only 44.1 kHz. With
+`--mono` the output is downmixed to a single channel.
 
 ## Download
 
@@ -60,6 +63,9 @@ without its permissions), make it executable once with `chmod +x qt7convert`.
 
 # Convert every *.wav and *.mp3 in a folder
 ./qt7convert ~/Desktop/Recordings
+
+# Downmix MP3 conversions to mono (for devices that reject stereo)
+./qt7convert --mono song.mp3
 ```
 
 Folder mode writes a `<name>.qt7.wav` copy for each file; originals are
@@ -79,7 +85,8 @@ on Windows and macOS, with no native dependencies:
 using Qt7AudioConverter;
 
 WavQt7Converter.Convert("input.wav", "output.wav");   // lossless chunk rewrite
-Mp3ToQt7Converter.Convert("input.mp3", "output.wav"); // decode MP3 to PCM WAV
+Mp3ToQt7Converter.Convert("input.mp3", "output.wav"); // decode to 44.1 kHz PCM WAV
+Mp3ToQt7Converter.Convert("input.mp3", "output.wav", downmixToMono: true);
 // stream overloads exist for both
 ```
 

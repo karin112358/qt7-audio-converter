@@ -18,22 +18,23 @@ namespace Qt7AudioConverter
         /// <summary>
         /// Converts <paramref name="inputPath"/> and writes the canonical WAV to
         /// <paramref name="outputPath"/> (overwriting it if it exists).
+        /// Returns the file's sample rate in Hz.
         /// </summary>
-        public static void Convert(string inputPath, string outputPath)
+        public static int Convert(string inputPath, string outputPath)
         {
             using (var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             using (var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                Convert(input, output);
+                return Convert(input, output);
             }
         }
 
         /// <summary>
         /// Reads a RIFF/WAVE stream from <paramref name="input"/> and writes the
         /// canonical form to <paramref name="output"/>. The input stream must be
-        /// seekable; both streams are left open.
+        /// seekable; both streams are left open. Returns the sample rate in Hz.
         /// </summary>
-        public static void Convert(Stream input, Stream output)
+        public static int Convert(Stream input, Stream output)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             if (output == null) throw new ArgumentNullException(nameof(output));
@@ -63,6 +64,17 @@ namespace Qt7AudioConverter
             if (factChunk != null) WriteChunk(input, writer, factChunk);
             WriteChunk(input, writer, dataChunk);
             writer.Flush();
+
+            return ReadSampleRate(input, fmtChunk);
+        }
+
+        private static int ReadSampleRate(Stream input, ChunkInfo fmtChunk)
+        {
+            if (fmtChunk.Size < 8) return 0;
+            input.Seek(fmtChunk.DataOffset + 4, SeekOrigin.Begin); // fmt: format(2), channels(2), sampleRate(4)
+            var bytes = new byte[4];
+            int got = input.Read(bytes, 0, 4);
+            return got == 4 ? bytes[0] | bytes[1] << 8 | bytes[2] << 16 | bytes[3] << 24 : 0;
         }
 
         private sealed class ChunkInfo

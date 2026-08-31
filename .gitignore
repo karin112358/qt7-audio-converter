@@ -1,0 +1,13 @@
+# Build output
+bin/
+obj/
+publish/
+
+# IDE
+.vs/
+*.user
+
+# Local sample/test audio — never commit
+QT07.wav
+QT10.wav
+*.qt7.wav

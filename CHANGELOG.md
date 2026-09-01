@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.0 (2026-09-01)
+
+- Folder conversions now write into a separate output folder instead of
+  next to the originals: by default a `qt7` subfolder of the input folder
+  (created automatically), or any folder given as the second argument —
+  including the memory card itself.
+
 ## 1.5.0 (2026-09-01)
 
 - New `--normalize [dBFS]` option: measures each file's peak and raises it

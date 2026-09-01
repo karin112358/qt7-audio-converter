@@ -55,8 +55,9 @@ if (normalize && volume != 1f)
 
 if (paths.Count is < 1 or > 2)
 {
-    Console.Error.WriteLine("Usage: qt7convert [--mono] [--volume <factor>] [--normalize [dBFS]] [--short] <input.wav|input.mp3|folder> [output.wav]");
-    Console.Error.WriteLine("  With a folder, every *.wav and *.mp3 inside is converted to <name>-qt7.wav.");
+    Console.Error.WriteLine("Usage: qt7convert [--mono] [--volume <factor>] [--normalize [dBFS]] [--short] <input.wav|input.mp3|folder> [output.wav|output-folder]");
+    Console.Error.WriteLine("  With a folder, every *.wav and *.mp3 inside is converted to <name>-qt7.wav");
+    Console.Error.WriteLine("  in the output folder (default: a 'qt7' subfolder of the input folder).");
     Console.Error.WriteLine("  --mono              downmix conversions to a single channel.");
     Console.Error.WriteLine("  --volume <factor>   multiply loudness, e.g. 1.5 = 50% louder, 0.5 = half.");
     Console.Error.WriteLine("  --normalize [dBFS]  raise each file to the given peak level (default 0 = maximum).");
@@ -68,13 +69,11 @@ string input = paths[0];
 
 if (Directory.Exists(input))
 {
-    if (paths.Count == 2)
-    {
-        Console.Error.WriteLine("An output path cannot be combined with a folder input.");
-        return 1;
-    }
+    string outDir = paths.Count == 2 ? paths[1] : Path.Combine(input, "qt7");
+    Directory.CreateDirectory(outDir);
 
     Console.WriteLine($"Converting: {Path.GetFullPath(input)}");
+    Console.WriteLine($"Output:     {Path.GetFullPath(outDir)}");
     int converted = 0, failed = 0;
     string suffix = NameSuffix(volume, normalize, normalizeDbfs);
     var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -83,7 +82,7 @@ if (Directory.Exists(input))
     {
         if (created.Contains(file) || !IsConvertible(file))
             continue;
-        string target = TargetPath(file, suffix, shortNames, usedNames);
+        string target = TargetPath(file, outDir, suffix, shortNames, usedNames);
         created.Add(target);
         try
         {
@@ -113,8 +112,8 @@ if (!File.Exists(input))
 
 string output = paths.Count == 2
     ? paths[1]
-    : TargetPath(input, NameSuffix(volume, normalize, normalizeDbfs), shortNames,
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+    : TargetPath(input, Path.GetDirectoryName(input) ?? "", NameSuffix(volume, normalize, normalizeDbfs),
+        shortNames, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
 try
 {
@@ -169,9 +168,9 @@ static float NormalizeFactor(string inputFile, bool mono, float targetDbfs, out 
     return factor;
 }
 
-static string TargetPath(string inputFile, string extraSuffix, bool shortNames, HashSet<string> usedNames)
+static string TargetPath(string inputFile, string outDir, string extraSuffix, bool shortNames, HashSet<string> usedNames)
 {
-    string dir = Path.GetDirectoryName(inputFile) ?? "";
+    string dir = outDir;
     if (!shortNames)
         return Path.Combine(dir, Path.GetFileNameWithoutExtension(inputFile) + "-qt7" + extraSuffix + ".wav");
 

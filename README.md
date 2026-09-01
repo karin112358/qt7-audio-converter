@@ -68,8 +68,10 @@ without its permissions), make it executable once with `chmod +x qt7convert`.
 # Choose the output name
 ./qt7convert recording.wav fixed.wav
 
-# Convert every *.wav and *.mp3 in a folder
+# Convert every *.wav and *.mp3 in a folder; outputs go into a 'qt7'
+# subfolder (or name your own output folder as the second argument)
 ./qt7convert ~/Desktop/Recordings
+./qt7convert ~/Desktop/Recordings /Volumes/CFCARD
 
 # Downmix conversions to mono (halves memory use on samplers)
 ./qt7convert --mono song.mp3
@@ -89,8 +91,10 @@ without its permissions), make it executable once with `chmod +x qt7convert`.
 ```
 
 Folder mode writes a `<name>-qt7.wav` copy for each file (with `--short`,
-an 8-character name like `08FINGER.wav` instead); originals are
-never modified. Files that are already in canonical form pass through
+an 8-character name like `08FINGER.wav` instead) into a separate output
+folder — by default `qt7` inside the input folder, created automatically;
+pass a second path to choose another output folder (even directly the
+memory card). Originals are never modified. Files that are already in canonical form pass through
 unchanged, so it is safe to run the converter on everything. Note that
 `--mono`, `--volume`, or `--normalize` forces re-encoding of WAV files
 that would otherwise be copied losslessly, and a too-high volume clips

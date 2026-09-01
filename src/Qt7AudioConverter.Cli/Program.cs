@@ -1,13 +1,38 @@
+using System.Globalization;
 using Qt7AudioConverter;
 
-bool mono = args.Contains("--mono");
-string[] paths = args.Where(a => a != "--mono").ToArray();
-
-if (paths.Length is < 1 or > 2)
+bool mono = false;
+float volume = 1f;
+var paths = new List<string>();
+for (int i = 0; i < args.Length; i++)
 {
-    Console.Error.WriteLine("Usage: qt7convert [--mono] <input.wav|input.mp3|folder> [output.wav]");
+    switch (args[i])
+    {
+        case "--mono":
+            mono = true;
+            break;
+        case "--volume":
+            if (i + 1 >= args.Length
+                || !float.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out volume)
+                || volume <= 0f)
+            {
+                Console.Error.WriteLine("--volume needs a positive number in English format, e.g. --volume 1.5");
+                return 1;
+            }
+            i++;
+            break;
+        default:
+            paths.Add(args[i]);
+            break;
+    }
+}
+
+if (paths.Count is < 1 or > 2)
+{
+    Console.Error.WriteLine("Usage: qt7convert [--mono] [--volume <factor>] <input.wav|input.mp3|folder> [output.wav]");
     Console.Error.WriteLine("  With a folder, every *.wav and *.mp3 inside is converted to <name>.qt7.wav.");
-    Console.Error.WriteLine("  --mono  downmix conversions to a single channel.");
+    Console.Error.WriteLine("  --mono             downmix conversions to a single channel.");
+    Console.Error.WriteLine("  --volume <factor>  multiply loudness, e.g. 1.5 = 50% louder, 0.5 = half.");
     return 1;
 }
 
@@ -15,7 +40,7 @@ string input = paths[0];
 
 if (Directory.Exists(input))
 {
-    if (paths.Length == 2)
+    if (paths.Count == 2)
     {
         Console.Error.WriteLine("An output path cannot be combined with a folder input.");
         return 1;
@@ -29,8 +54,7 @@ if (Directory.Exists(input))
         string target = Path.ChangeExtension(file, null) + ".qt7.wav";
         try
         {
-            string note = ConvertFile(file, target, mono);
-            Console.WriteLine($"Converted: {file} -> {target}{note}");
+            ConvertFile(file, target, mono, volume);
             converted++;
         }
         catch (Exception ex)
@@ -49,14 +73,13 @@ if (!File.Exists(input))
     return 1;
 }
 
-string output = paths.Length == 2
+string output = paths.Count == 2
     ? paths[1]
     : Path.ChangeExtension(input, null) + ".qt7.wav";
 
 try
 {
-    string note = ConvertFile(input, output, mono);
-    Console.WriteLine($"Converted: {input} -> {output}{note}");
+    ConvertFile(input, output, mono, volume);
     return 0;
 }
 catch (Exception ex)
@@ -74,36 +97,47 @@ static bool IsConvertible(string file)
         || ext.Equals(".mp3", StringComparison.OrdinalIgnoreCase);
 }
 
-static string ConvertFile(string inputFile, string outputFile, bool mono)
+static void ConvertFile(string inputFile, string outputFile, bool mono, float volume)
 {
-    var changes = new List<string>();
+    string sourceDesc, outputDesc, note;
+    long clipped;
     if (Path.GetExtension(inputFile).Equals(".mp3", StringComparison.OrdinalIgnoreCase))
     {
-        var info = Mp3ToQt7Converter.Convert(inputFile, outputFile, mono);
-        AddChange(changes, info.SourceSampleRate, info.OutputSampleRate, " Hz");
-        AddChannelChange(changes, info.SourceChannels, info.OutputChannels);
+        var info = Mp3ToQt7Converter.Convert(inputFile, outputFile, mono, volume);
+        sourceDesc = Describe(info.SourceSampleRate, "MP3", info.SourceChannels, info.SourceDurationSeconds, inputFile);
+        outputDesc = Describe(info.OutputSampleRate, "16-bit", info.OutputChannels, info.OutputDurationSeconds, outputFile);
+        note = VolumeNote(volume);
+        clipped = info.ClippedSamples;
     }
     else
     {
-        var info = WavQt7Converter.Convert(inputFile, outputFile, mono);
-        AddChange(changes, info.SourceSampleRate, info.OutputSampleRate, " Hz");
-        AddChange(changes, info.SourceBitsPerSample, info.OutputBitsPerSample, "-bit");
-        AddChannelChange(changes, info.SourceChannels, info.OutputChannels);
+        var info = WavQt7Converter.Convert(inputFile, outputFile, mono, volume);
+        sourceDesc = Describe(info.SourceSampleRate, $"{info.SourceBitsPerSample}-bit", info.SourceChannels, info.SourceDurationSeconds, inputFile);
+        outputDesc = Describe(info.OutputSampleRate, $"{info.OutputBitsPerSample}-bit", info.OutputChannels, info.OutputDurationSeconds, outputFile);
+        note = info.Lossless ? " (lossless copy)" : VolumeNote(volume);
+        clipped = info.ClippedSamples;
     }
-    return changes.Count > 0 ? $" ({string.Join(", ", changes)})" : "";
+
+    Console.WriteLine($"Converted: {inputFile} -> {outputFile}");
+    Console.WriteLine($"           {sourceDesc}  ->  {outputDesc}{note}");
+    if (clipped > 0)
+        Console.WriteLine($"           warning: {clipped} sample(s) clipped — try a lower --volume");
 }
 
-static void AddChange(List<string> changes, int source, int output, string unit)
+static string Describe(int sampleRate, string bits, int channels, double durationSeconds, string file)
 {
-    if (source != output)
-        changes.Add($"{source}{unit} -> {output}{unit}");
+    string size = new FileInfo(file).Length switch
+    {
+        >= 1024 * 1024 => $"{new FileInfo(file).Length / (1024.0 * 1024.0):0.0} MB",
+        var b => $"{b / 1024.0:0} KB",
+    };
+    return $"{sampleRate} Hz, {bits}, {ChannelName(channels)}, " +
+        durationSeconds.ToString("0.0#", CultureInfo.InvariantCulture) + $" s, {size}";
 }
 
-static void AddChannelChange(List<string> changes, int source, int output)
-{
-    if (source != output)
-        changes.Add($"{ChannelName(source)} -> {ChannelName(output)}");
-}
+static string VolumeNote(float volume) => volume != 1f
+    ? " (volume x" + volume.ToString(CultureInfo.InvariantCulture) + ")"
+    : "";
 
 static string ChannelName(int channels) => channels switch
 {

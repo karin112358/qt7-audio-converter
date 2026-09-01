@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 (2026-09-01)
+
+- New `--volume <factor>` option: linear gain, e.g. `1.5` = 50% louder,
+  `0.5` = half volume (English number format). Applies to WAV and MP3
+  conversions; using it forces re-encoding of otherwise-lossless WAVs.
+  Clipped samples are counted and reported with a warning.
+- The CLI now prints full source and result details for every conversion
+  (sample rate, bit depth, channels, duration, file size).
+
 ## 1.2.0 (2026-09-01)
 
 - WAV files that legacy devices cannot play (48/96 kHz, 24/32-bit, 32/64-bit

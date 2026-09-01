@@ -38,16 +38,17 @@ namespace Qt7AudioConverter
         }
 
         /// <summary>Converts float samples (clamped to ±1) to 16-bit little-endian
-        /// PCM and writes them; returns the number of bytes written.</summary>
-        public static long WritePcm16(Stream output, float[] samples, int count, ref byte[] pcm)
+        /// PCM and writes them; returns the number of bytes written and counts
+        /// clamped (clipped) samples in <paramref name="clipped"/>.</summary>
+        public static long WritePcm16(Stream output, float[] samples, int count, ref byte[] pcm, ref long clipped)
         {
             if (count == 0) return 0;
             if (pcm.Length < count * 2) pcm = new byte[count * 2];
             for (int i = 0; i < count; i++)
             {
                 float clamped = samples[i];
-                if (clamped > 1f) clamped = 1f;
-                else if (clamped < -1f) clamped = -1f;
+                if (clamped > 1f) { clamped = 1f; clipped++; }
+                else if (clamped < -1f) { clamped = -1f; clipped++; }
                 short sample = (short)Math.Round(clamped * short.MaxValue);
                 pcm[i * 2] = (byte)sample;
                 pcm[i * 2 + 1] = (byte)(sample >> 8);

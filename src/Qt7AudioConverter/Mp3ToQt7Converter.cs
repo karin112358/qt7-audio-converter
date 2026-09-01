@@ -7,18 +7,28 @@ namespace Qt7AudioConverter
     /// <summary>What an MP3 conversion did: source format vs. written format.</summary>
     public readonly struct Mp3ConversionInfo
     {
-        public Mp3ConversionInfo(int sourceSampleRate, int sourceChannels, int outputSampleRate, int outputChannels)
+        public Mp3ConversionInfo(int sourceSampleRate, int sourceChannels, double sourceDurationSeconds,
+            int outputSampleRate, int outputChannels, double outputDurationSeconds, long clippedSamples)
         {
             SourceSampleRate = sourceSampleRate;
             SourceChannels = sourceChannels;
+            SourceDurationSeconds = sourceDurationSeconds;
             OutputSampleRate = outputSampleRate;
             OutputChannels = outputChannels;
+            OutputDurationSeconds = outputDurationSeconds;
+            ClippedSamples = clippedSamples;
         }
 
         public int SourceSampleRate { get; }
         public int SourceChannels { get; }
+        public double SourceDurationSeconds { get; }
         public int OutputSampleRate { get; }
         public int OutputChannels { get; }
+        public double OutputDurationSeconds { get; }
+
+        /// <summary>Samples that exceeded full scale and were clamped (e.g. due
+        /// to a volume boost).</summary>
+        public long ClippedSamples { get; }
     }
 
     /// <summary>
@@ -41,12 +51,12 @@ namespace Qt7AudioConverter
         /// if it exists). With <paramref name="downmixToMono"/> the channels
         /// are averaged into one.
         /// </summary>
-        public static Mp3ConversionInfo Convert(string inputPath, string outputPath, bool downmixToMono = false)
+        public static Mp3ConversionInfo Convert(string inputPath, string outputPath, bool downmixToMono = false, float volume = 1f)
         {
             using (var mpeg = new MpegFile(inputPath))
             using (var output = new FileStream(outputPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
             {
-                return Convert(mpeg, output, downmixToMono);
+                return Convert(mpeg, output, downmixToMono, volume);
             }
         }
 
@@ -56,19 +66,20 @@ namespace Qt7AudioConverter
         /// stream must be seekable (the size fields are patched after
         /// decoding); both streams are left open.
         /// </summary>
-        public static Mp3ConversionInfo Convert(Stream input, Stream output, bool downmixToMono = false)
+        public static Mp3ConversionInfo Convert(Stream input, Stream output, bool downmixToMono = false, float volume = 1f)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             using (var mpeg = new MpegFile(new NonClosingStream(input)))
             {
-                return Convert(mpeg, output, downmixToMono);
+                return Convert(mpeg, output, downmixToMono, volume);
             }
         }
 
-        private static Mp3ConversionInfo Convert(MpegFile mpeg, Stream output, bool downmixToMono)
+        private static Mp3ConversionInfo Convert(MpegFile mpeg, Stream output, bool downmixToMono, float volume)
         {
             if (output == null) throw new ArgumentNullException(nameof(output));
             if (!output.CanSeek) throw new ArgumentException("Output stream must be seekable.", nameof(output));
+            if (!(volume > 0f)) throw new ArgumentOutOfRangeException(nameof(volume), "Volume must be greater than 0.");
 
             int srcRate = mpeg.SampleRate;
             int srcChannels = mpeg.Channels;
@@ -87,6 +98,8 @@ namespace Qt7AudioConverter
             var resampled = new float[SamplesPerBlock * 2];
             var pcm = new byte[SamplesPerBlock * 4];
             long dataBytes = 0;
+            long clipped = 0;
+            long srcFrames = 0;
             int carry = 0; // decoded samples not forming a whole frame yet
             int read;
             while ((read = mpeg.ReadSamples(decoded, carry, decoded.Length - carry)) > 0)
@@ -94,6 +107,7 @@ namespace Qt7AudioConverter
                 int total = carry + read;
                 int frameCount = total / srcChannels;
                 carry = total - frameCount * srcChannels;
+                srcFrames += frameCount;
 
                 if (downmixToMono && srcChannels > 1)
                 {
@@ -113,6 +127,12 @@ namespace Qt7AudioConverter
                 for (int i = 0; i < carry; i++)
                     decoded[i] = decoded[frameCount * srcChannels + i];
 
+                if (volume != 1f)
+                {
+                    for (int i = 0; i < frameCount * outChannels; i++)
+                        frames[i] *= volume;
+                }
+
                 int outSamples;
                 float[] outBuf;
                 if (resampler != null)
@@ -125,20 +145,23 @@ namespace Qt7AudioConverter
                     outSamples = frameCount * outChannels;
                     outBuf = frames;
                 }
-                dataBytes += CanonicalWavWriter.WritePcm16(output, outBuf, outSamples, ref pcm);
+                dataBytes += CanonicalWavWriter.WritePcm16(output, outBuf, outSamples, ref pcm, ref clipped);
             }
 
             if (resampler != null)
             {
                 int tail = resampler.Flush(ref resampled);
-                dataBytes += CanonicalWavWriter.WritePcm16(output, resampled, tail, ref pcm);
+                dataBytes += CanonicalWavWriter.WritePcm16(output, resampled, tail, ref pcm, ref clipped);
             }
 
             if (dataBytes == 0)
                 throw new InvalidDataException("Not a valid MP3 file: no audio frames could be decoded.");
             CanonicalWavWriter.PatchSizes(output, headerStart, dataBytes);
 
-            return new Mp3ConversionInfo(srcRate, srcChannels, TargetSampleRate, outChannels);
+            return new Mp3ConversionInfo(
+                srcRate, srcChannels, srcFrames / (double)srcRate,
+                TargetSampleRate, outChannels, dataBytes / 2.0 / outChannels / TargetSampleRate,
+                clipped);
         }
 
         /// <summary>Shields a caller-owned stream from being disposed by MpegFile.</summary>

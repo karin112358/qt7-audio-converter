@@ -10,29 +10,38 @@ namespace Qt7AudioConverter
     public readonly struct WavConversionInfo
     {
         public WavConversionInfo(
-            int sourceSampleRate, int sourceBitsPerSample, int sourceChannels,
-            int outputSampleRate, int outputBitsPerSample, int outputChannels,
-            bool lossless)
+            int sourceSampleRate, int sourceBitsPerSample, int sourceChannels, double sourceDurationSeconds,
+            int outputSampleRate, int outputBitsPerSample, int outputChannels, double outputDurationSeconds,
+            bool lossless, long clippedSamples)
         {
             SourceSampleRate = sourceSampleRate;
             SourceBitsPerSample = sourceBitsPerSample;
             SourceChannels = sourceChannels;
+            SourceDurationSeconds = sourceDurationSeconds;
             OutputSampleRate = outputSampleRate;
             OutputBitsPerSample = outputBitsPerSample;
             OutputChannels = outputChannels;
+            OutputDurationSeconds = outputDurationSeconds;
             Lossless = lossless;
+            ClippedSamples = clippedSamples;
         }
 
         public int SourceSampleRate { get; }
         public int SourceBitsPerSample { get; }
         public int SourceChannels { get; }
+        public double SourceDurationSeconds { get; }
         public int OutputSampleRate { get; }
         public int OutputBitsPerSample { get; }
         public int OutputChannels { get; }
+        public double OutputDurationSeconds { get; }
 
         /// <summary>True when the audio bytes were copied unchanged (only the
         /// chunk layout was rewritten).</summary>
         public bool Lossless { get; }
+
+        /// <summary>Samples that exceeded full scale and were clamped (e.g. due
+        /// to a volume boost).</summary>
+        public long ClippedSamples { get; }
     }
 
     /// <summary>
@@ -53,14 +62,15 @@ namespace Qt7AudioConverter
         /// Converts <paramref name="inputPath"/> and writes the canonical WAV to
         /// <paramref name="outputPath"/> (overwriting it if it exists). With
         /// <paramref name="downmixToMono"/> multi-channel audio is averaged
-        /// into one channel (which forces the decode path).
+        /// into one channel; <paramref name="volume"/> is a linear gain factor
+        /// (1 = unchanged). Either option forces the decode path.
         /// </summary>
-        public static WavConversionInfo Convert(string inputPath, string outputPath, bool downmixToMono = false)
+        public static WavConversionInfo Convert(string inputPath, string outputPath, bool downmixToMono = false, float volume = 1f)
         {
             using (var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             using (var output = new FileStream(outputPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
             {
-                return Convert(input, output, downmixToMono);
+                return Convert(input, output, downmixToMono, volume);
             }
         }
 
@@ -69,12 +79,13 @@ namespace Qt7AudioConverter
         /// canonical form to <paramref name="output"/>. Both streams must be
         /// seekable; both are left open.
         /// </summary>
-        public static WavConversionInfo Convert(Stream input, Stream output, bool downmixToMono = false)
+        public static WavConversionInfo Convert(Stream input, Stream output, bool downmixToMono = false, float volume = 1f)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             if (output == null) throw new ArgumentNullException(nameof(output));
             if (!input.CanSeek) throw new ArgumentException("Input stream must be seekable.", nameof(input));
             if (!output.CanSeek) throw new ArgumentException("Output stream must be seekable.", nameof(output));
+            if (!(volume > 0f)) throw new ArgumentOutOfRangeException(nameof(volume), "Volume must be greater than 0.");
 
             var chunks = ReadChunkTable(input);
 
@@ -86,23 +97,22 @@ namespace Qt7AudioConverter
 
             var fmt = ParseFormat(input, fmtChunk);
 
+            double sourceDuration = dataChunk.Size
+                / (double)(fmt.SampleRate * fmt.Channels * (fmt.BitsPerSample / 8));
+
             bool compliant = fmt.IsIntegerPcm
                 && fmt.SampleRate == TargetSampleRate
                 && (fmt.BitsPerSample == 8 || fmt.BitsPerSample == 16);
-            if (compliant && !(downmixToMono && fmt.Channels > 1))
+            if (compliant && !(downmixToMono && fmt.Channels > 1) && volume == 1f)
             {
                 CopyLossless(input, output, fmtChunk, factChunk, dataChunk);
                 return new WavConversionInfo(
-                    fmt.SampleRate, fmt.BitsPerSample, fmt.Channels,
-                    fmt.SampleRate, fmt.BitsPerSample, fmt.Channels,
-                    lossless: true);
+                    fmt.SampleRate, fmt.BitsPerSample, fmt.Channels, sourceDuration,
+                    fmt.SampleRate, fmt.BitsPerSample, fmt.Channels, sourceDuration,
+                    lossless: true, clippedSamples: 0);
             }
 
-            int outChannels = Decode(input, output, fmt, dataChunk, downmixToMono);
-            return new WavConversionInfo(
-                fmt.SampleRate, fmt.BitsPerSample, fmt.Channels,
-                TargetSampleRate, 16, outChannels,
-                lossless: false);
+            return Decode(input, output, fmt, dataChunk, downmixToMono, volume, sourceDuration);
         }
 
         // ---------- format parsing ----------
@@ -172,7 +182,8 @@ namespace Qt7AudioConverter
 
         // ---------- decode/resample path ----------
 
-        private static int Decode(Stream input, Stream output, FormatInfo fmt, ChunkInfo dataChunk, bool downmixToMono)
+        private static WavConversionInfo Decode(Stream input, Stream output, FormatInfo fmt, ChunkInfo dataChunk,
+            bool downmixToMono, float volume, double sourceDuration)
         {
             int bytesPerSample = fmt.BitsPerSample / 8;
             bool supported = fmt.IsIntegerPcm
@@ -197,6 +208,7 @@ namespace Qt7AudioConverter
             var pcm = new byte[FramesPerBlock * fmt.Channels * 2];
             long remaining = dataChunk.Size - dataChunk.Size % frameBytes; // ignore a trailing partial frame
             long dataBytes = 0;
+            long clipped = 0;
 
             input.Seek(dataChunk.DataOffset, SeekOrigin.Begin);
             while (remaining > 0)
@@ -218,6 +230,12 @@ namespace Qt7AudioConverter
                     }
                 }
 
+                if (volume != 1f)
+                {
+                    for (int i = 0; i < frameCount * outChannels; i++)
+                        frames[i] *= volume;
+                }
+
                 int outSamples;
                 float[] outBuf;
                 if (resampler != null)
@@ -230,17 +248,21 @@ namespace Qt7AudioConverter
                     outSamples = frameCount * outChannels;
                     outBuf = frames;
                 }
-                dataBytes += CanonicalWavWriter.WritePcm16(output, outBuf, outSamples, ref pcm);
+                dataBytes += CanonicalWavWriter.WritePcm16(output, outBuf, outSamples, ref pcm, ref clipped);
             }
 
             if (resampler != null)
             {
                 int tail = resampler.Flush(ref resampled);
-                dataBytes += CanonicalWavWriter.WritePcm16(output, resampled, tail, ref pcm);
+                dataBytes += CanonicalWavWriter.WritePcm16(output, resampled, tail, ref pcm, ref clipped);
             }
 
             CanonicalWavWriter.PatchSizes(output, headerStart, dataBytes);
-            return outChannels;
+            double outputDuration = dataBytes / 2.0 / outChannels / TargetSampleRate;
+            return new WavConversionInfo(
+                fmt.SampleRate, fmt.BitsPerSample, fmt.Channels, sourceDuration,
+                TargetSampleRate, 16, outChannels, outputDuration,
+                lossless: false, clippedSamples: clipped);
         }
 
         private static void DecodeSamples(byte[] raw, float[] samples, int count, int bytesPerSample, bool isFloat)

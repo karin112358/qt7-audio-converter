@@ -72,11 +72,17 @@ without its permissions), make it executable once with `chmod +x qt7convert`.
 
 # Downmix conversions to mono (halves memory use on samplers)
 ./qt7convert --mono song.mp3
+
+# Adjust loudness: 1.5 = 50% louder, 0.5 = half volume (English number format)
+./qt7convert --volume 1.5 song.mp3
 ```
 
 Folder mode writes a `<name>.qt7.wav` copy for each file; originals are
 never modified. Files that are already in canonical form pass through
-unchanged, so it is safe to run the converter on everything.
+unchanged, so it is safe to run the converter on everything. Note that
+`--mono` or `--volume` forces re-encoding of WAV files that would
+otherwise be copied losslessly, and a too-high volume clips (the tool
+warns and reports how many samples were affected).
 
 Tip: in the macOS Terminal you can type `./qt7convert ` and then drag a
 folder from Finder into the window to insert its path.
@@ -94,6 +100,7 @@ WavQt7Converter.Convert("input.wav", "output.wav");   // lossless when already 4
                                                       // 8/16-bit, else 44.1 kHz 16-bit
 Mp3ToQt7Converter.Convert("input.mp3", "output.wav"); // decode to 44.1 kHz PCM WAV
 Mp3ToQt7Converter.Convert("input.mp3", "output.wav", downmixToMono: true);
+WavQt7Converter.Convert("input.wav", "output.wav", volume: 1.5f); // 50% louder
 // stream overloads exist for both; both return an info struct describing what changed
 ```
 

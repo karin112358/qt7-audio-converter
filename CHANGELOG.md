@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1 (2026-09-01)
+
+- Improved console output: aligned source/result columns per file, the
+  folder is printed once with file names only, consistent English number
+  formatting.
+
 ## 1.3.0 (2026-09-01)
 
 - New `--volume <factor>` option: linear gain, e.g. `1.5` = 50% louder,

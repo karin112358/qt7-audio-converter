@@ -2,6 +2,7 @@ using System.Globalization;
 using Qt7AudioConverter;
 
 bool mono = false;
+bool shortNames = false;
 float volume = 1f;
 var paths = new List<string>();
 for (int i = 0; i < args.Length; i++)
@@ -10,6 +11,9 @@ for (int i = 0; i < args.Length; i++)
     {
         case "--mono":
             mono = true;
+            break;
+        case "--short":
+            shortNames = true;
             break;
         case "--volume":
             if (i + 1 >= args.Length
@@ -29,10 +33,11 @@ for (int i = 0; i < args.Length; i++)
 
 if (paths.Count is < 1 or > 2)
 {
-    Console.Error.WriteLine("Usage: qt7convert [--mono] [--volume <factor>] <input.wav|input.mp3|folder> [output.wav]");
-    Console.Error.WriteLine("  With a folder, every *.wav and *.mp3 inside is converted to <name>.qt7.wav.");
+    Console.Error.WriteLine("Usage: qt7convert [--mono] [--volume <factor>] [--short] <input.wav|input.mp3|folder> [output.wav]");
+    Console.Error.WriteLine("  With a folder, every *.wav and *.mp3 inside is converted to <name>-qt7.wav.");
     Console.Error.WriteLine("  --mono             downmix conversions to a single channel.");
     Console.Error.WriteLine("  --volume <factor>  multiply loudness, e.g. 1.5 = 50% louder, 0.5 = half.");
+    Console.Error.WriteLine("  --short            write 8-character output names for old devices (e.g. 08FINGER.wav).");
     return 1;
 }
 
@@ -48,11 +53,14 @@ if (Directory.Exists(input))
 
     Console.WriteLine($"Converting: {Path.GetFullPath(input)}");
     int converted = 0, failed = 0;
+    var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var created = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     foreach (string file in Directory.EnumerateFiles(input))
     {
-        if (!IsConvertible(file))
+        if (created.Contains(file) || !IsConvertible(file))
             continue;
-        string target = Path.ChangeExtension(file, null) + ".qt7.wav";
+        string target = TargetPath(file, volume, shortNames, usedNames);
+        created.Add(target);
         try
         {
             ConvertFile(file, target, mono, volume, namesOnly: true);
@@ -77,7 +85,7 @@ if (!File.Exists(input))
 
 string output = paths.Count == 2
     ? paths[1]
-    : Path.ChangeExtension(input, null) + ".qt7.wav";
+    : TargetPath(input, volume, shortNames, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
 try
 {
@@ -92,11 +100,42 @@ catch (Exception ex)
 
 static bool IsConvertible(string file)
 {
-    if (file.EndsWith(".qt7.wav", StringComparison.OrdinalIgnoreCase))
+    string name = Path.GetFileNameWithoutExtension(file);
+    if (name.EndsWith(".qt7", StringComparison.OrdinalIgnoreCase)         // legacy output naming
+        || name.Contains("-qt7", StringComparison.OrdinalIgnoreCase))
         return false; // skip our own output files
     string ext = Path.GetExtension(file);
     return ext.Equals(".wav", StringComparison.OrdinalIgnoreCase)
         || ext.Equals(".mp3", StringComparison.OrdinalIgnoreCase);
+}
+
+static string TargetPath(string inputFile, float volume, bool shortNames, HashSet<string> usedNames)
+{
+    string dir = Path.GetDirectoryName(inputFile) ?? "";
+    if (!shortNames)
+    {
+        string suffix = "-qt7" + (volume != 1f
+            ? "-vol" + volume.ToString(CultureInfo.InvariantCulture).Replace('.', '_')
+            : "");
+        return Path.Combine(dir, Path.GetFileNameWithoutExtension(inputFile) + suffix + ".wav");
+    }
+
+    var kept = new System.Text.StringBuilder();
+    foreach (char c in Path.GetFileNameWithoutExtension(inputFile).ToUpperInvariant())
+        if (c is >= 'A' and <= 'Z' or >= '0' and <= '9')
+            kept.Append(c);
+    string name = kept.Length == 0 ? "SOUND" : kept.ToString();
+    if (name.Length > 8) name = name[..8];
+    if (!usedNames.Add(name))
+    {
+        for (int i = 2; ; i++)
+        {
+            string n = i.ToString();
+            string candidate = (name.Length + n.Length <= 8 ? name : name[..(8 - n.Length)]) + n;
+            if (usedNames.Add(candidate)) { name = candidate; break; }
+        }
+    }
+    return Path.Combine(dir, name + ".wav");
 }
 
 static void ConvertFile(string inputFile, string outputFile, bool mono, float volume, bool namesOnly)

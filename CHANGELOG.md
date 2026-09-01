@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0 (2026-09-01)
+
+- Output naming: `<name>-qt7.wav` instead of `<name>.qt7.wav` (no extra dot —
+  legacy devices reject names containing one). A volume factor becomes part
+  of the name, e.g. `song-qt7-vol1_5.wav`.
+- New `--short` option writes 8-character output names for old devices like
+  the Roland SPD-S (`08 - Finger Snap.wav` → `08FINGER.wav`; letters/digits
+  only, uppercase, name collisions get numbered).
+
 ## 1.3.3 (2026-09-01)
 
 - macOS builds are now also offered as `.zip` downloads alongside the

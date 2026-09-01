@@ -78,6 +78,11 @@ without its permissions), make it executable once with `chmod +x qt7convert`.
 # The factor becomes part of the output name: song-qt7-vol1_5.wav
 ./qt7convert --volume 1.5 song.mp3
 
+# Normalize: raise every file to maximum level (0 dBFS peak), or to a
+# given peak level in dBFS. Output names get e.g. -qt7-norm0 / -qt7-norm-1.
+./qt7convert --normalize ~/Desktop/Recordings
+./qt7convert --normalize -1 song.mp3
+
 # 8-character output names for old devices like the Roland SPD-S
 # ("08 - Finger Snap.wav" -> 08FINGER.wav; collisions get numbered)
 ./qt7convert --short ~/Desktop/Recordings
@@ -87,9 +92,12 @@ Folder mode writes a `<name>-qt7.wav` copy for each file (with `--short`,
 an 8-character name like `08FINGER.wav` instead); originals are
 never modified. Files that are already in canonical form pass through
 unchanged, so it is safe to run the converter on everything. Note that
-`--mono` or `--volume` forces re-encoding of WAV files that would
-otherwise be copied losslessly, and a too-high volume clips (the tool
-warns and reports how many samples were affected).
+`--mono`, `--volume`, or `--normalize` forces re-encoding of WAV files
+that would otherwise be copied losslessly, and a too-high volume clips
+(the tool warns and reports how many samples were affected). When
+normalizing resampled files to 0 dBFS, a couple of clipped samples from
+resampling overshoot are normal and inaudible; use e.g. `--normalize -0.5`
+if you want none at all.
 
 Tip: in the macOS Terminal you can type `./qt7convert ` and then drag a
 folder from Finder into the window to insert its path.

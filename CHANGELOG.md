@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0 (2026-09-01)
+
+- New `--normalize [dBFS]` option: measures each file's peak and raises it
+  to the target level (default 0 dBFS = maximum). Works per file, so every
+  converted file in a folder ends up equally loud. Cannot be combined with
+  `--volume`. Output names get e.g. `-qt7-norm0`.
+- New `MeasurePeak` methods in the library for both WAV and MP3.
+
 ## 1.4.0 (2026-09-01)
 
 - Output naming: `<name>-qt7.wav` instead of `<name>.qt7.wav` (no extra dot —

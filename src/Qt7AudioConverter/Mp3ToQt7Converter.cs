@@ -75,6 +75,56 @@ namespace Qt7AudioConverter
             }
         }
 
+        /// <summary>
+        /// Decodes the MP3 and returns its peak sample magnitude as a linear
+        /// value (1 = full scale, 0 = silence). With
+        /// <paramref name="downmixToMono"/> the peak of the mono downmix is
+        /// measured, matching what a downmixed conversion would write.
+        /// </summary>
+        public static float MeasurePeak(string inputPath, bool downmixToMono = false)
+        {
+            using (var mpeg = new MpegFile(inputPath))
+            {
+                int channels = mpeg.Channels;
+                if (channels <= 0)
+                    throw new InvalidDataException("Not a valid MP3 file: no audio stream found.");
+
+                var decoded = new float[SamplesPerBlock];
+                float peak = 0;
+                int carry = 0;
+                int read;
+                while ((read = mpeg.ReadSamples(decoded, carry, decoded.Length - carry)) > 0)
+                {
+                    int total = carry + read;
+                    int frameCount = total / channels;
+                    carry = total - frameCount * channels;
+
+                    if (downmixToMono && channels > 1)
+                    {
+                        for (int f = 0; f < frameCount; f++)
+                        {
+                            float sum = 0;
+                            for (int c = 0; c < channels; c++) sum += decoded[f * channels + c];
+                            float v = Math.Abs(sum / channels);
+                            if (v > peak) peak = v;
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < frameCount * channels; i++)
+                        {
+                            float v = Math.Abs(decoded[i]);
+                            if (v > peak) peak = v;
+                        }
+                    }
+
+                    for (int i = 0; i < carry; i++)
+                        decoded[i] = decoded[frameCount * channels + i];
+                }
+                return peak;
+            }
+        }
+
         private static Mp3ConversionInfo Convert(MpegFile mpeg, Stream output, bool downmixToMono, float volume)
         {
             if (output == null) throw new ArgumentNullException(nameof(output));

@@ -3,6 +3,8 @@ using Qt7AudioConverter;
 
 bool mono = false;
 bool shortNames = false;
+bool normalize = false;
+float normalizeDbfs = 0f;
 float volume = 1f;
 var paths = new List<string>();
 for (int i = 0; i < args.Length; i++)
@@ -25,19 +27,40 @@ for (int i = 0; i < args.Length; i++)
             }
             i++;
             break;
+        case "--normalize":
+            normalize = true;
+            if (i + 1 < args.Length
+                && float.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out float db))
+            {
+                if (db > 0f)
+                {
+                    Console.Error.WriteLine("--normalize target must be 0 dBFS (maximum) or negative, e.g. --normalize -1");
+                    return 1;
+                }
+                normalizeDbfs = db;
+                i++;
+            }
+            break;
         default:
             paths.Add(args[i]);
             break;
     }
 }
 
+if (normalize && volume != 1f)
+{
+    Console.Error.WriteLine("--volume and --normalize cannot be combined.");
+    return 1;
+}
+
 if (paths.Count is < 1 or > 2)
 {
-    Console.Error.WriteLine("Usage: qt7convert [--mono] [--volume <factor>] [--short] <input.wav|input.mp3|folder> [output.wav]");
+    Console.Error.WriteLine("Usage: qt7convert [--mono] [--volume <factor>] [--normalize [dBFS]] [--short] <input.wav|input.mp3|folder> [output.wav]");
     Console.Error.WriteLine("  With a folder, every *.wav and *.mp3 inside is converted to <name>-qt7.wav.");
-    Console.Error.WriteLine("  --mono             downmix conversions to a single channel.");
-    Console.Error.WriteLine("  --volume <factor>  multiply loudness, e.g. 1.5 = 50% louder, 0.5 = half.");
-    Console.Error.WriteLine("  --short            write 8-character output names for old devices (e.g. 08FINGER.wav).");
+    Console.Error.WriteLine("  --mono              downmix conversions to a single channel.");
+    Console.Error.WriteLine("  --volume <factor>   multiply loudness, e.g. 1.5 = 50% louder, 0.5 = half.");
+    Console.Error.WriteLine("  --normalize [dBFS]  raise each file to the given peak level (default 0 = maximum).");
+    Console.Error.WriteLine("  --short             write 8-character output names for old devices (e.g. 08FINGER.wav).");
     return 1;
 }
 
@@ -53,17 +76,22 @@ if (Directory.Exists(input))
 
     Console.WriteLine($"Converting: {Path.GetFullPath(input)}");
     int converted = 0, failed = 0;
+    string suffix = NameSuffix(volume, normalize, normalizeDbfs);
     var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     var created = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     foreach (string file in Directory.EnumerateFiles(input))
     {
         if (created.Contains(file) || !IsConvertible(file))
             continue;
-        string target = TargetPath(file, volume, shortNames, usedNames);
+        string target = TargetPath(file, suffix, shortNames, usedNames);
         created.Add(target);
         try
         {
-            ConvertFile(file, target, mono, volume, namesOnly: true);
+            float fileVolume = volume;
+            string? note = null;
+            if (normalize)
+                fileVolume = NormalizeFactor(file, mono, normalizeDbfs, out note);
+            ConvertFile(file, target, mono, fileVolume, namesOnly: true, note);
             converted++;
         }
         catch (Exception ex)
@@ -85,11 +113,16 @@ if (!File.Exists(input))
 
 string output = paths.Count == 2
     ? paths[1]
-    : TargetPath(input, volume, shortNames, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+    : TargetPath(input, NameSuffix(volume, normalize, normalizeDbfs), shortNames,
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
 try
 {
-    ConvertFile(input, output, mono, volume, namesOnly: false);
+    float fileVolume = volume;
+    string? note = null;
+    if (normalize)
+        fileVolume = NormalizeFactor(input, mono, normalizeDbfs, out note);
+    ConvertFile(input, output, mono, fileVolume, namesOnly: false, note);
     return 0;
 }
 catch (Exception ex)
@@ -109,16 +142,38 @@ static bool IsConvertible(string file)
         || ext.Equals(".mp3", StringComparison.OrdinalIgnoreCase);
 }
 
-static string TargetPath(string inputFile, float volume, bool shortNames, HashSet<string> usedNames)
+static string NameSuffix(float volume, bool normalize, float normalizeDbfs)
+{
+    if (normalize)
+        return "-norm" + normalizeDbfs.ToString(CultureInfo.InvariantCulture).Replace('.', '_');
+    if (volume != 1f)
+        return "-vol" + volume.ToString(CultureInfo.InvariantCulture).Replace('.', '_');
+    return "";
+}
+
+static float NormalizeFactor(string inputFile, bool mono, float targetDbfs, out string? note)
+{
+    float peak = Path.GetExtension(inputFile).Equals(".mp3", StringComparison.OrdinalIgnoreCase)
+        ? Mp3ToQt7Converter.MeasurePeak(inputFile, mono)
+        : WavQt7Converter.MeasurePeak(inputFile, mono);
+    if (peak <= 0f)
+    {
+        note = "  (silent file, not normalized)";
+        return 1f;
+    }
+    float target = (float)Math.Pow(10, targetDbfs / 20.0);
+    float factor = target / peak;
+    double peakDb = 20.0 * Math.Log10(peak);
+    note = "  (normalized: peak " + peakDb.ToString("0.0", CultureInfo.InvariantCulture)
+        + " -> " + targetDbfs.ToString("0.0", CultureInfo.InvariantCulture) + " dBFS)";
+    return factor;
+}
+
+static string TargetPath(string inputFile, string extraSuffix, bool shortNames, HashSet<string> usedNames)
 {
     string dir = Path.GetDirectoryName(inputFile) ?? "";
     if (!shortNames)
-    {
-        string suffix = "-qt7" + (volume != 1f
-            ? "-vol" + volume.ToString(CultureInfo.InvariantCulture).Replace('.', '_')
-            : "");
-        return Path.Combine(dir, Path.GetFileNameWithoutExtension(inputFile) + suffix + ".wav");
-    }
+        return Path.Combine(dir, Path.GetFileNameWithoutExtension(inputFile) + "-qt7" + extraSuffix + ".wav");
 
     var kept = new System.Text.StringBuilder();
     foreach (char c in Path.GetFileNameWithoutExtension(inputFile).ToUpperInvariant())
@@ -138,7 +193,7 @@ static string TargetPath(string inputFile, float volume, bool shortNames, HashSe
     return Path.Combine(dir, name + ".wav");
 }
 
-static void ConvertFile(string inputFile, string outputFile, bool mono, float volume, bool namesOnly)
+static void ConvertFile(string inputFile, string outputFile, bool mono, float volume, bool namesOnly, string? noteOverride = null)
 {
     string sourceDesc, outputDesc, note;
     long clipped;
@@ -147,7 +202,7 @@ static void ConvertFile(string inputFile, string outputFile, bool mono, float vo
         var info = Mp3ToQt7Converter.Convert(inputFile, outputFile, mono, volume);
         sourceDesc = Describe(info.SourceSampleRate, "MP3", info.SourceChannels, info.SourceDurationSeconds, inputFile);
         outputDesc = Describe(info.OutputSampleRate, "16-bit", info.OutputChannels, info.OutputDurationSeconds, outputFile);
-        note = VolumeNote(volume);
+        note = noteOverride ?? VolumeNote(volume);
         clipped = info.ClippedSamples;
     }
     else
@@ -155,7 +210,7 @@ static void ConvertFile(string inputFile, string outputFile, bool mono, float vo
         var info = WavQt7Converter.Convert(inputFile, outputFile, mono, volume);
         sourceDesc = Describe(info.SourceSampleRate, $"{info.SourceBitsPerSample}-bit", info.SourceChannels, info.SourceDurationSeconds, inputFile);
         outputDesc = Describe(info.OutputSampleRate, $"{info.OutputBitsPerSample}-bit", info.OutputChannels, info.OutputDurationSeconds, outputFile);
-        note = info.Lossless ? "  (lossless copy)" : VolumeNote(volume);
+        note = info.Lossless ? "  (lossless copy)" : noteOverride ?? VolumeNote(volume);
         clipped = info.ClippedSamples;
     }
 
@@ -165,7 +220,7 @@ static void ConvertFile(string inputFile, string outputFile, bool mono, float vo
     Console.WriteLine($"    source: {sourceDesc}");
     Console.WriteLine($"    result: {outputDesc}{note}");
     if (clipped > 0)
-        Console.WriteLine($"    warning: {clipped} sample(s) clipped - try a lower --volume");
+        Console.WriteLine($"    warning: {clipped} sample(s) clipped - use a lower --volume or --normalize target");
 }
 
 static string Describe(int sampleRate, string bits, int channels, double durationSeconds, string file)

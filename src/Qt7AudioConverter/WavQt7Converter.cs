@@ -115,6 +115,62 @@ namespace Qt7AudioConverter
             return Decode(input, output, fmt, dataChunk, downmixToMono, volume, sourceDuration);
         }
 
+        /// <summary>
+        /// Decodes the file and returns its peak sample magnitude as a linear
+        /// value (1 = full scale, 0 = silence). With
+        /// <paramref name="downmixToMono"/> the peak of the mono downmix is
+        /// measured, matching what a downmixed conversion would write.
+        /// </summary>
+        public static float MeasurePeak(string inputPath, bool downmixToMono = false)
+        {
+            using (var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                var chunks = ReadChunkTable(input);
+                if (!chunks.TryGetValue("fmt ", out var fmtChunk))
+                    throw new InvalidDataException("Not a valid WAV file: missing 'fmt ' chunk.");
+                if (!chunks.TryGetValue("data", out var dataChunk))
+                    throw new InvalidDataException("Not a valid WAV file: missing 'data' chunk.");
+                var fmt = ParseFormat(input, fmtChunk);
+
+                int bytesPerSample = fmt.BitsPerSample / 8;
+                int frameBytes = bytesPerSample * fmt.Channels;
+                var raw = new byte[FramesPerBlock * frameBytes];
+                var frames = new float[FramesPerBlock * fmt.Channels];
+                long remaining = dataChunk.Size - dataChunk.Size % frameBytes;
+                float peak = 0;
+
+                input.Seek(dataChunk.DataOffset, SeekOrigin.Begin);
+                while (remaining > 0)
+                {
+                    int want = (int)Math.Min(raw.Length, remaining);
+                    ReadExactly(input, raw, want);
+                    remaining -= want;
+                    int frameCount = want / frameBytes;
+                    DecodeSamples(raw, frames, frameCount * fmt.Channels, bytesPerSample, fmt.IsFloat);
+
+                    if (downmixToMono && fmt.Channels > 1)
+                    {
+                        for (int f = 0; f < frameCount; f++)
+                        {
+                            float sum = 0;
+                            for (int c = 0; c < fmt.Channels; c++) sum += frames[f * fmt.Channels + c];
+                            float v = Math.Abs(sum / fmt.Channels);
+                            if (v > peak) peak = v;
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < frameCount * fmt.Channels; i++)
+                        {
+                            float v = Math.Abs(frames[i]);
+                            if (v > peak) peak = v;
+                        }
+                    }
+                }
+                return peak;
+            }
+        }
+
         // ---------- format parsing ----------
 
         private readonly struct FormatInfo

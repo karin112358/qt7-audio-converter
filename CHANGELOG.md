@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.3 (2026-09-01)
+
+- macOS builds are now also offered as `.zip` downloads alongside the
+  existing `.tar.gz` archives.
+
 ## 1.3.1 (2026-09-01)
 
 - Improved console output: aligned source/result columns per file, the

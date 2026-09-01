@@ -31,6 +31,7 @@ jobs:
           for rid in osx-x64 osx-arm64; do
             chmod +x "publish/$rid/qt7convert"
             tar czf "assets/qt7convert-$rid.tar.gz" -C "publish/$rid" qt7convert
+            (cd "publish/$rid" && zip -q "../../assets/qt7convert-$rid.zip" qt7convert)
           done
 
       - name: Create GitHub release

@@ -38,8 +38,8 @@ Grab the build for your system from the [latest release](../../releases/latest):
 | System | Asset |
 |---|---|
 | Windows (64-bit) | `qt7convert-win-x64.zip` |
-| macOS, Intel (macOS 10.15+, incl. Big Sur) | `qt7convert-osx-x64.tar.gz` |
-| macOS, Apple Silicon (M1 and later) | `qt7convert-osx-arm64.tar.gz` |
+| macOS, Intel (macOS 10.15+, incl. Big Sur) | `qt7convert-osx-x64.tar.gz` (or `.zip`) |
+| macOS, Apple Silicon (M1 and later) | `qt7convert-osx-arm64.tar.gz` (or `.zip`) |
 
 The executables are self-contained — no .NET installation or other runtime
 is required.
@@ -47,7 +47,8 @@ is required.
 **Windows:** unzip and run `qt7convert.exe` from a terminal.
 
 **macOS:** unpack with `tar xzf qt7convert-osx-x64.tar.gz` (Archive Utility
-works too). If the file was downloaded with a browser, clear the quarantine
+works too); both the tar.gz and the zip are extracted by double-click in
+Finder. If the file was downloaded with a browser, clear the quarantine
 flag once:
 
 ```bash

@@ -53,7 +53,6 @@ if (Directory.Exists(input))
         if (!IsConvertible(file))
             continue;
         string target = Path.ChangeExtension(file, null) + ".qt7.wav";
-        Console.WriteLine();
         try
         {
             ConvertFile(file, target, mono, volume, namesOnly: true);
@@ -66,7 +65,6 @@ if (Directory.Exists(input))
             failed++;
         }
     }
-    Console.WriteLine();
     Console.WriteLine($"{converted} file(s) converted, {failed} failed.");
     return failed == 0 ? 0 : 1;
 }
@@ -123,12 +121,10 @@ static void ConvertFile(string inputFile, string outputFile, bool mono, float vo
     }
 
     Console.WriteLine(namesOnly
-        ? Path.GetFileName(inputFile)
+        ? $"{Path.GetFileName(inputFile)} -> {Path.GetFileName(outputFile)}"
         : $"{inputFile} -> {outputFile}");
     Console.WriteLine($"    source: {sourceDesc}");
     Console.WriteLine($"    result: {outputDesc}{note}");
-    if (namesOnly)
-        Console.WriteLine($"        -> {Path.GetFileName(outputFile)}");
     if (clipped > 0)
         Console.WriteLine($"    warning: {clipped} sample(s) clipped - try a lower --volume");
 }

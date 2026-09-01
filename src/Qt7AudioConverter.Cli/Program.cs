@@ -7,7 +7,7 @@ if (paths.Length is < 1 or > 2)
 {
     Console.Error.WriteLine("Usage: qt7convert [--mono] <input.wav|input.mp3|folder> [output.wav]");
     Console.Error.WriteLine("  With a folder, every *.wav and *.mp3 inside is converted to <name>.qt7.wav.");
-    Console.Error.WriteLine("  --mono  downmix MP3 conversions to a single channel.");
+    Console.Error.WriteLine("  --mono  downmix conversions to a single channel.");
     return 1;
 }
 
@@ -76,21 +76,33 @@ static bool IsConvertible(string file)
 
 static string ConvertFile(string inputFile, string outputFile, bool mono)
 {
+    var changes = new List<string>();
     if (Path.GetExtension(inputFile).Equals(".mp3", StringComparison.OrdinalIgnoreCase))
     {
         var info = Mp3ToQt7Converter.Convert(inputFile, outputFile, mono);
-        var changes = new List<string>();
-        if (info.SourceSampleRate != info.OutputSampleRate)
-            changes.Add($"{info.SourceSampleRate} Hz -> {info.OutputSampleRate} Hz");
-        if (info.SourceChannels != info.OutputChannels)
-            changes.Add($"{ChannelName(info.SourceChannels)} -> {ChannelName(info.OutputChannels)}");
-        return changes.Count > 0 ? $" ({string.Join(", ", changes)})" : "";
+        AddChange(changes, info.SourceSampleRate, info.OutputSampleRate, " Hz");
+        AddChannelChange(changes, info.SourceChannels, info.OutputChannels);
     }
+    else
+    {
+        var info = WavQt7Converter.Convert(inputFile, outputFile, mono);
+        AddChange(changes, info.SourceSampleRate, info.OutputSampleRate, " Hz");
+        AddChange(changes, info.SourceBitsPerSample, info.OutputBitsPerSample, "-bit");
+        AddChannelChange(changes, info.SourceChannels, info.OutputChannels);
+    }
+    return changes.Count > 0 ? $" ({string.Join(", ", changes)})" : "";
+}
 
-    int sampleRate = WavQt7Converter.Convert(inputFile, outputFile);
-    return sampleRate is 44100 or 0
-        ? ""
-        : $" (note: {sampleRate} Hz — old devices may only accept 44100 Hz)";
+static void AddChange(List<string> changes, int source, int output, string unit)
+{
+    if (source != output)
+        changes.Add($"{source}{unit} -> {output}{unit}");
+}
+
+static void AddChannelChange(List<string> changes, int source, int output)
+{
+    if (source != output)
+        changes.Add($"{ChannelName(source)} -> {ChannelName(output)}");
 }
 
 static string ChannelName(int channels) => channels switch

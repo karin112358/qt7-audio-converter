@@ -14,9 +14,15 @@ that expect `fmt ` directly after the header and `data` directly after that —
 they refuse or misread such files.
 
 **qt7convert** rewrites the file keeping only the `fmt `, `fact` (if present)
-and `data` chunks in canonical order. The audio payload is copied
-byte-for-byte — the conversion is completely lossless, no re-encoding takes
-place.
+and `data` chunks in canonical order. For WAV files that are already
+44.1 kHz with 8- or 16-bit integer PCM, the audio payload is copied
+byte-for-byte — completely lossless, no re-encoding.
+
+Legacy hardware (e.g. the Roland SPD-S) typically accepts *only* 44.1 kHz
+8/16-bit WAV files. Modern DAW exports are often 48/96 kHz, 24-bit, or
+32-bit float — those are automatically decoded, resampled, and written as
+44.1 kHz 16-bit PCM. The tool prints what it changed, e.g.
+`(48000 Hz -> 44100 Hz, 24-bit -> 16-bit)`.
 
 MP3 files are also supported: they are decoded to 16-bit PCM (using the
 managed, cross-platform [NLayer](https://www.nuget.org/packages/NLayer)
@@ -64,7 +70,7 @@ without its permissions), make it executable once with `chmod +x qt7convert`.
 # Convert every *.wav and *.mp3 in a folder
 ./qt7convert ~/Desktop/Recordings
 
-# Downmix MP3 conversions to mono (for devices that reject stereo)
+# Downmix conversions to mono (halves memory use on samplers)
 ./qt7convert --mono song.mp3
 ```
 
@@ -84,10 +90,11 @@ on Windows and macOS, with no native dependencies:
 ```csharp
 using Qt7AudioConverter;
 
-WavQt7Converter.Convert("input.wav", "output.wav");   // lossless chunk rewrite
+WavQt7Converter.Convert("input.wav", "output.wav");   // lossless when already 44.1 kHz
+                                                      // 8/16-bit, else 44.1 kHz 16-bit
 Mp3ToQt7Converter.Convert("input.mp3", "output.wav"); // decode to 44.1 kHz PCM WAV
 Mp3ToQt7Converter.Convert("input.mp3", "output.wav", downmixToMono: true);
-// stream overloads exist for both
+// stream overloads exist for both; both return an info struct describing what changed
 ```
 
 ## Building from source
